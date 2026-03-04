@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Cost of Ideology - ตำรวจสีกากี</title>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --text-color: #00ff41;
+            --accent-color: #ff9d00;
+            --danger-color: #ff4141;
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #terminal {
+            width: 90%;
+            max-width: 900px;
+            height: 85vh;
+            border: 2px solid var(--text-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+            position: relative;
+            background: rgba(0, 0, 0, 0.9);
+        }
+
+        #stats-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-bottom: 1px solid var(--text-color);
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label { font-size: 12px; opacity: 0.8; }
+        .stat-value { font-size: 18px; color: var(--accent-color); }
+
+        #story-display {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            line-height: 1.5;
+            padding-right: 10px;
+        }
+
+        .typing-effect {
+            border-right: 2px solid var(--text-color);
+            white-space: pre-wrap;
+            animation: blink 0.7s infinite;
+        }
+
+        @keyframes blink { 50% { border-color: transparent } }
+
+        #choices-box {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--text-color);
+            color: var(--text-color);
+            padding: 12px;
+            cursor: pointer;
+            font-family: var(--font-main);
+            text-align: left;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: var(--text-color);
+            color: var(--bg-color);
+            font-weight: bold;
+        }
+
+        .effect-tag { font-size: 12px; margin-left: 10px; }
+        .plus { color: #00ff41; }
+        .minus { color: var(--danger-color); }
+
+        #persistence-input-container {
+            display: none;
+            margin-top: 20px;
+            border-top: 1px dashed var(--accent-color);
+            padding-top: 15px;
+        }
+
+        input[type="text"] {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            width: 100%;
+            outline: none;
+            font-family: var(--font-main);
+            font-size: 16px;
+            padding: 5px;
+        }
+
+        /* Scanline Overlay */
+        #terminal::after {
+            content: " ";
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 100, 0.03));
+            z-index: 10;
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="terminal">
+    <div id="stats-bar">
+        <div class="stat-item">
+            <span class="stat-label">เงินในบัญชี</span>
+            <span id="money" class="stat-value">15,000</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">ค่าธิป (Democracy)</span>
+            <span id="thip" class="stat-value">50%</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">ความสุขครอบครัว</span>
+            <span id="family" class="stat-value">50%</span>
+        </div>
+    </div>
+
+    <div id="story-display"></div>
+
+    <div id="choices-box"></div>
+
+    <div id="persistence-input-container">
+        <p style="color: var(--accent-color);">[SYSTEM BREACHED] ระบุความปรารถนาสุดท้ายของคุณ:</p>
+        <input type="text" id="custom-input" placeholder="พิมพ์ประโยคเพื่อเปลี่ยนประวัติศาสตร์..." autofocus>
+    </div>
+</div>
+
+<script>
+    // Game State
+    let state = {
+        money: 15000,
+        thip: 50,
+        family: 50,
+        currentId: "1.0",
+        persistenceClicks: 0,
+        isGameOver: false,
+        debt: 0
+    };
+
+    // Story Nodes
+    const nodes = {
+        "1.0": {
+            level: 1,
+            title: "จุดเริ่มต้น (The Foundation)",
+            text: "ซองเงินเดือนเดือนแรกถูกยื่นให้คุณในห้องพักผ่อน... แต่มันดูบางกว่าที่ระบุในสัญญา 'ค่าธรรมเนียมเข้าเวร' และ 'ค่าบำรุงโรงพัก' ถูกหักออกไปอย่างไร้ร่องรอย",
+            choices: [
+                { text: "ยอมรับชะตากรรม (รับเงินที่เหลือ)", next: "1.1", money: 0, thip: -5, family: 0 },
+                { text: "ทวงถามจ่ากองร้อยเรื่องบัญชี", next: "1.2", money: 500, thip: 10, family: -5 }
+            ]
+        },
+        "1.1": { text: "คุณพยักหน้าเงียบๆ จ่าตบบ่าคุณ 'อยู่ง่ายๆ แบบนี้แหละหมวด อนาคตไกล' คุณได้เงิน 15,000 บาทเท่าเดิม", next: "2.0" },
+        "1.2": { text: "จ่ามองหน้าคุณด้วยสายตาเย็นชา 'เรื่องเยอะนะหมวด...' เขาโยนเงินเพิ่มให้ 500 บาท แต่ชื่อคุณถูกกาหัวไว้ในฐานะตัวปัญหา", next: "2.0" },
+
+        "2.0": {
+            level: 2,
+            title: "พาหนะคู่ใจ (The Debt)",
+            text: "งานตำรวจต้องเดินทางตลอดเวลา แต่หลวงไม่มีรถให้ ภรรยาบอกว่า 'หมวดจะขี่มอเตอร์ไซค์เก่าๆ ไปทำงานไม่ได้นะ ลูกน้องจะมองยังไง'",
+            choices: [
+                { text: "ซื้อมอเตอร์ไซค์มือสอง (ประหยัด)", next: "2.1", money: -5000, thip: 0, family: -10 },
+                { text: "ออกรถกระบะป้ายแดง (ต้องกู้)", next: "2.2", money: -20000, thip: -5, family: 20 }
+            ]
+        },
+        "2.1": { text: "คุณเลือกความประหยัด ภรรยาถอนหายใจและเงียบไปตลอดวัน งานของคุณเดินช้าลงเพราะพาหนะไม่เอื้ออำนวย", next: "3.0" },
+        "2.2": { text: "รถใหม่เอี่ยมจอดหน้าบ้าน ภรรยายิ้มกว้าง แต่คุณรู้ดีว่าภาระผ่อนเดือนละ 15,000 บาท กำลังรออยู่", next: "3.0" },
+
+        "3.0": {
+            level: 3,
+            title: "ด่านตรวจพิสูจน์ใจ (The Checkpoint)",
+            text: "คืนนี้คุณคุมด่าน รถบรรทุกน้ำหนักเกินคันหนึ่งจอดเทียบ คนขับเดินลงมาพร้อม 'พับแบงก์เทา' ในมือ 'ช่วยหน่อยนะหมวด ยอดส่งนายยังขาดอยู่เลย'",
+            choices: [
+                { text: "รับส่วยส่งนาย (และแอบเก็บไว้เองส่วนหนึ่ง)", next: "3.1", money: 30000, thip: -20, family: 10 },
+                { text: "ปฏิเสธและจับกุมตามกฎหมาย", next: "3.2", money: 0, thip: 30, family: -10 }
+            ]
+        },
+        "3.1": { text: "เงินปึกใหญ่เข้ากระเป๋า นายพอใจในผลงานของคุณ 'หมวดคนนี้คุยง่าย' คืนนั้นคุณซื้อของเล่นให้ลูกชุดใหญ่", next: "4.0" },
+        "3.2": { text: "คุณทำตามหน้าที่ นายโทรมาด่าคุณยับที่ทำเรื่องยุ่งยาก 'อยากเดินตรวจเท้าเปล่าใช่ไหม!'", next: "4.0" },
+
+        "4.0": {
+            level: 4,
+            title: "อนาคตของลูก (The Education)",
+            text: "ลูกของคุณถึงเกณฑ์เข้าเรียน ภรรยาอยากให้ลูกเรียนโรงเรียนเอกชนชั้นนำ 'ค่าเทอม 5 หมื่นนะหมวด เพื่ออนาคตลูก'",
+            choices: [
+                { text: "เลือกโรงเรียนรัฐใกล้บ้าน", next: "4.1", money: -2000, thip: 0, family: -15 },
+                { text: "เลือกโรงเรียนเอกชน (จ่ายหนัก)", next: "4.2", money: -50000, thip: 0, family: 30 }
+            ]
+        },
+        "4.1": { text: "ลูกเข้าโรงเรียนรัฐ ภรรยาเสียใจที่คุณไม่พยายามเพื่อลูกให้มากกว่านี้", next: "5.0" },
+        "4.2": { text: "เงินในบัญชีลดฮวบ ถ้าเงินไม่พอ คุณจำต้องเป็นหนี้นอกระบบสะสม", next: "5.0" },
+
+        "5.0": {
+            level: 5,
+            title: "อิทธิพลเหนือกฎหมาย (The Conflict)",
+            text: "คดีลูกท่านหลานเธอเมาขับชนร้านค้าพังพินาศ นายเดินมาตบบ่า 'หมวด ช่วยทำสำนวนให้เป็นแค่อุบัติเหตุสุดวิสัยหน่อยนะ เดี๋ยวมีรางวัลให้'",
+            choices: [
+                { text: "ช่วยบิดสำนวนคดี (รับรางวัล)", next: "5.1", money: 100000, thip: -40, family: 20 },
+                { text: "ยืนยันส่งฟ้องตามความเป็นจริง", next: "5.2", money: -10000, thip: 50, family: -20 }
+            ]
+        },
+        "5.1": { text: "สำนวนถูกแก้ไข เงินแสนเข้าบัญชี คุณกลายเป็นลูกน้องคนสนิทของนายใหญ่", next: "6.0" },
+        "5.2": { text: "คุณถูกสั่งย้ายไปช่วยงานเอกสารที่ชายขอบทันที งบประมาณหน่วยถูกตัด ครอบครัวโดนข่มขู่จากคนมีสี", next: "6.0" },
+
+        "6.0": {
+            level: 6,
+            title: "วิมานในฝัน (The Shelter)",
+            text: "บ้านพักตำรวจโทรมจนหลังคารั่ว ภรรยาขอร้องให้ซื้อบ้านจัดสรร 'เราไม่อยากให้ลูกโตมาในแฟลตที่เหม็นกลิ่นกัญชาแบบนี้'",
+            choices: [
+                { text: "ทนอยู่แฟลตต่อไป", next: "6.1", money: 0, thip: 5, family: -30 },
+                { text: "ซื้อบ้านจัดสรร (ผ่อนงวดแรก)", next: "6.2", money: -30000, thip: 0, family: 40 }
+            ]
+        },
+        "6.1": { text: "ความสัมพันธ์ในบ้านเริ่มร้าวฉาน ภรรยาพาลูกกลับไปอยู่บ้านแม่ชั่วคราว", next: "7.0" },
+        "6.2": { text: "บ้านใหม่สวยงาม แต่ภาระหนี้สินเริ่มรัดตัวคุณจนหายใจไม่ออก", next: "7.0" },
+
+        "7.0": {
+            level: 7,
+            title: "การซื้ออำนาจ (The Rank)",
+            text: "วาระเลื่อนขั้นเป็นสารวัตรมาถึง มีคนกระซิบว่าถ้าอยากได้ 'ตำแหน่งทอง' ต้องใช้ตั๋ว 5 แสนบาท",
+            choices: [
+                { text: "จ่ายค่าตั๋ว 5 แสน (กู้หรือใช้เงินส่วย)", next: "7.1", money: -500000, thip: -50, family: 50 },
+                { text: "รอตามรอบปกติ (โดนข้ามหัวแน่ๆ)", next: "7.2", money: 0, thip: 10, family: -20 }
+            ]
+        },
+        "7.1": { text: "คุณได้ติดดาวสามดวงในพื้นที่ทำเงิน ชีวิตเปลี่ยนไปในพริบตา", next: "8.0" },
+        "7.2": { text: "รุ่นน้องที่จ่ายเงินแซงหน้าคุณไป ยศคุณหยุดนิ่ง ภรรยาตั้งคำถามในความสามารถของคุณ", next: "8.0" },
+
+        "8.0": {
+            level: 8,
+            title: "วิกฤตศรัทธา (The Climax)",
+            text: "ม็อบบุกยึดสถานที่ราชการ นายสั่งการผ่านวิทยุ: 'ใช้แก๊สน้ำตาและกระสุนยางสลายการชุมนุมทันที อย่าให้เหลือร่องรอย!'",
+            choices: [
+                { text: "ทำตามคำสั่ง (สลายม็อบ)", next: "8.1", money: 50000, thip: -100, family: 10 },
+                { text: "เจรจาและปฏิเสธความรุนแรง", next: "persistence", money: 0, thip: 0, family: 0 }
+            ]
+        },
+        "8.1": { text: "คุณกลายเป็นเครื่องมือทำลายประชาชนอย่างสมบูรณ์ ระบบปูนบำเหน็จให้คุณอย่างงาม", next: "9.0" },
+
+        "9.0": {
+            level: 9,
+            title: "บทสรุปชีวิต (Final Judgment)",
+            text: "เวลาผ่านไปหลายปี... คุณมองย้อนกลับไปที่เส้นทางที่คุณเลือกเดิน",
+            choices: [
+                { text: "ดูบทสรุปความจริง", next: "end", money: 0, thip: 0, family: 0 }
+            ]
+        }
+    };
+
+    function formatMoney(val) {
+        return val.toLocaleString() + " THB";
+    }
+
+    function updateStats() {
+        document.getElementById('money').innerText = formatMoney(state.money);
+        document.getElementById('thip').innerText = state.thip + "%";
+        document.getElementById('family').innerText = state.family + "%";
+        
+        // Color coding for stats
+        document.getElementById('money').style.color = state.money < 0 ? 'var(--danger-color)' : 'var(--accent-color)';
+        document.getElementById('thip').style.color = state.thip < 30 ? 'var(--danger-color)' : 'var(--text-color)';
+    }
+
+    function displayNode(nodeId) {
+        const node = nodes[nodeId];
+        const display = document.getElementById('story-display');
+        const choices = document.getElementById('choices-box');
+        
+        display.innerHTML = "";
+        choices.innerHTML = "";
+
+        if (node.title) {
+            const h2 = document.createElement('h2');
+            h2.innerText = `LEVEL ${node.level}: ${node.title}`;
+            h2.style.color = "var(--accent-color)";
+            display.appendChild(h2);
+        }
+
+        const p = document.createElement('p');
+        p.className = "typing-effect";
+        p.innerText = node.text;
+        display.appendChild(p);
+
+        // Handle Auto-next or Choices
+        if (node.choices) {
+            node.choices.forEach(c => {
+                const btn = document.createElement('button');
+                btn.innerHTML = c.text;
+                btn.onclick = () => handleChoice(c);
+                choices.appendChild(btn);
+            });
+        } else if (node.next) {
+            const btn = document.createElement('button');
+            btn.innerText = "[ ดำเนินการต่อไป ]";
+            btn.onclick = () => {
+                state.currentId = node.next;
+                displayNode(node.next);
+            };
+            choices.appendChild(btn);
+        }
+    }
+
+    function handleChoice(choice) {
+        // Persistence Mechanic Logic
+        if (choice.next === "persistence") {
+            state.persistenceClicks++;
+            if (state.persistenceClicks < 10) {
+                const msgs = [
+                    "นายตะโกนผ่านวิทยุ: ทำตามสั่งเดี๋ยวนี้!",
+                    "เพื่อนร่วมงานผลักคุณ: อย่าเรื่องมาก ทำไป!",
+                    "คุณลังเล... แต่มือยังกำกระบองไว้แน่น",
+                    "เสียงตะโกนจากม็อบ: ตำรวจฆ่าประชาชน!",
+                    "ผู้บังคับบัญชาขู่: อยากโดนเด้งใช่ไหม!",
+                    "ระบบบีบคั้นคุณ... (คลิกซ้ำเพื่อยืนหยัด)",
+                    "คุณกำลังจะถูกไล่ออก...",
+                    "ความกดดันมหาศาล...",
+                    "อีกนิดเดียว..."
+                ];
+                document.getElementById('story-display').innerHTML += `<p style="color:red; margin-top:10px;">[WARNING] ${msgs[state.persistenceClicks-1] || "ขัดคำสั่งไม่ได้!"} (${state.persistenceClicks}/10)</p>`;
+                return;
+            } else {
+                unlockSecretInput();
+                return;
+            }
+        }
+
+        // Apply Stats
+        state.money += choice.money || 0;
+        state.thip = Math.min(100, Math.max(0, state.thip + (choice.thip || 0)));
+        state.family = Math.min(100, Math.max(0, state.family + (choice.family || 0)));
+
+        // Debt check
+        if (state.money < 0) {
+            state.debt += Math.abs(state.money);
+            state.family -= 5;
+        }
+
+        updateStats();
+
+        if (choice.next === "end") {
+            showEnding();
+        } else {
+            state.currentId = choice.next;
+            displayNode(choice.next);
+        }
+    }
+
+    function unlockSecretInput() {
+        document.getElementById('choices-box').style.display = 'none';
+        document.getElementById('persistence-input-container').style.display = 'block';
+        const input = document.getElementById('custom-input');
+        input.focus();
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                showEnding(input.value);
+            }
+        };
+    }
+
+    function showEnding(customText = null) {
+        state.isGameOver = true;
+        const display = document.getElementById('story-display');
+        const choices = document.getElementById('choices-box');
+        choices.innerHTML = "";
+        
+        let title = "";
+        let desc = "";
+
+        if (customText) {
+            title = "วีรบุรุษผู้จุดไฟแห่งการเปลี่ยนแปลง";
+            desc = `คุณพิมพ์ลงในระบบว่า: "${customText}" ... การกระทำของคุณในวันนั้นกลายเป็นจุดเริ่มต้นของการปฏิรูปตำรวจ คุณถูกปลดจากราชการและมีคดีติดตัว แต่ชื่อของคุณถูกสลักไว้ในใจประชาชนในฐานะผู้พิทักษ์ประชาธิปไตยที่แท้จริง`;
+        } else if (state.money > 1000000 && state.thip < 20) {
+            title = "นายพลผู้มั่งคั่งบนกองซากศพ";
+            desc = "คุณมีบ้าน มีรถ มีบารมีล้นฟ้า แต่นอนไม่หลับทุกคืนเพราะมือที่เปื้อนเลือดและส่วย ครอบครัวสุขสบายบนความเกลียดชังของคนทั้งประเทศ";
+        } else if (state.thip > 80 && state.money < 10000) {
+            title = "ตำรวจนอกแถวที่ประชาชนรักที่สุด";
+            desc = "คุณเกษียณด้วยบ้านเช่าและหนี้สินพะรุงพะรัง แต่ทุกครั้งที่เดินไปตลาด ชาวบ้านจะยิ้มให้และขอบคุณที่คุณเคยช่วยเหลือพวกเขาในวันที่มืดมนที่สุด";
+        } else if (state.family < 30) {
+            title = "ผู้พิทักษ์ที่สูญเสียบ้าน";
+            desc = "คุณเลือกเส้นทางสายกลางที่ล้มเหลว งานก็ไม่รุ่ง อุดมการณ์ก็ไม่ชัดเจน จนสุดท้ายครอบครัวทิ้งคุณไปเหลือเพียงความว่างเปล่าในแฟลตโทรมๆ";
+        } else {
+            title = "ฟันเฟืองที่หมุนไปตามโลก";
+            desc = "คุณใช้ชีวิตแบบ 'อยู่เป็น' ไม่ดีที่สุด ไม่เลวที่สุด เป็นเพียงฟันเฟืองหนึ่งในระบบที่ทำให้ประเทศนี้ยังวนเวียนอยู่ที่เดิม";
+        }
+
+        display.innerHTML = `
+            <h1 style="color:var(--accent-color)">THE END</h1>
+            <hr>
+            <h2>${title}</h2>
+            <p>${desc}</p>
+            <div style="background:#1a1a1a; padding:15px; border-left:5px solid var(--accent-color);">
+                <p><strong>เงินเก็บสุดท้าย:</strong> ${formatMoney(state.money)}</p>
+                <p><strong>ค่าความชอบธรรม (Thip):</strong> ${state.thip}%</p>
+                <p><strong>ความสุขครอบครัว:</strong> ${state.family}%</p>
+            </div>
+            <button onclick="location.reload()" style="margin-top:20px;">เริ่มชีวิตใหม่ (New Life)</button>
+        `;
+    }
+
+    // Initialize
+    updateStats();
+    displayNode("1.0");
+</script>
+
+</body>
+</html>
